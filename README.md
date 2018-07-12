@@ -7,7 +7,7 @@ High level library to implement [Gearman] workers.
 Add this dependency to your `Cargo.toml`
 
 ```toml
-gearman-worker-rs = "*"
+gearman-worker = "*"
 ```
 
 ## Usage
