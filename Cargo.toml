@@ -1,0 +1,8 @@
+[package]
+name = "gearman-worker"
+version = "0.1.0"
+authors = ["Massimiliano Torromeo <massimiliano.torromeo@gmail.com>"]
+
+[dependencies]
+uuid = { version = "0.6.5", features = ["v4"] }
+byteorder = "1.2.3"
