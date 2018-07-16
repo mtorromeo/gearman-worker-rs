@@ -318,28 +318,82 @@ impl WorkerBuilder {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::time;
+    use std::thread;
+    use std::process::{Command, Stdio, Child};
+    use std::io::BufReader;
+
+    fn run_gearmand() -> Child {
+        let mut gearmand = Command::new("gearmand")
+            .arg("-L").arg("127.0.0.1")
+            .arg("-p").arg("14730")
+            .arg("-l").arg("stderr")
+            .arg("--verbose").arg("INFO")
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to stard gearmand");
+
+        let gearmand_err = gearmand.stderr.take().expect("Failed to capture gearmand's stderr");
+        let mut reader = BufReader::new(gearmand_err);
+        loop {
+            let mut line = String::new();
+            let len = reader.read_line(&mut line).unwrap();
+            if len == 0 || line.contains("Listening on 127.0.0.1:14730") {
+                break;
+            }
+        }
+
+        gearmand
+    }
+
+    fn submit_job(func: &str) -> Child {
+        let gearman_cli = Command::new("gearman")
+            .arg("-Is")
+            .arg("-p").arg("14730")
+            .arg("-f").arg(func)
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to submit gearman job");
+
+        let wait = time::Duration::from_millis(250);
+        thread::sleep(wait);
+
+        gearman_cli
+    }
+
     #[test]
     fn it_works() {
-        use super::*;
+        let mut gearmand = run_gearmand();
 
-        let addr = "127.0.0.1:4730".parse().unwrap();
+        let addr = "127.0.0.1:14730".parse().unwrap();
 
-        let mut worker = Worker::new(addr).with_id("gearman-worker-rs-1").connect().unwrap();
+        let mut worker = Worker::new(addr)
+            .with_id("gearman-worker-rs-1")
+            .connect()
+            .expect("Failed to connect to gearmand server");
 
         worker.register_function("testfun", |_| {
             println!("testfun called");
             Ok(b"foobar")
-        }).unwrap();
+        }).expect("Failed to register test function");
 
-        worker.set_function_enabled("testfun", false).unwrap();
+        // worker.set_function_enabled("testfun", false).unwrap();
 
-        worker.unregister_function("testfun").unwrap();
+        // worker.unregister_function("testfun").unwrap();
 
-        worker.set_function_enabled("testfun", true).unwrap();
+        // worker.set_function_enabled("testfun", true).unwrap();
 
-        // worker.run().unwrap();
+        let gearman_cli = submit_job("testfun");
 
         let done = worker.do_work().unwrap();
-        assert_eq!(done, 1);
+        assert_eq!(1, done);
+
+        let output = gearman_cli
+            .wait_with_output()
+            .expect("Failed to retrieve job output");
+        assert_eq!(b"foobar", output.stdout.as_slice());
+
+        gearmand.kill().expect("Failed to kill gearmand");
     }
 }
