@@ -45,7 +45,7 @@ pub struct WorkError {
 }
 
 impl Error for WorkError {
-    fn description<'a>(&'a self) -> &'a str {
+    fn description(&self) -> &str {
         "Work on function failed"
     }
 }
@@ -91,8 +91,8 @@ impl Packet {
         }
 
         Ok(Packet {
-            cmd: cmd,
-            data: data,
+            cmd,
+            data,
         })
     }
 }
@@ -104,7 +104,7 @@ pub struct Job {
 }
 
 impl Job {
-    fn from_data(data: Vec<u8>) -> io::Result<Self> {
+    fn from_data(data: &[u8]) -> io::Result<Self> {
         let mut iter = data.split(|c| *c == 0);
 
         let handle = match iter.next() {
@@ -126,7 +126,7 @@ impl Job {
         })
     }
 
-    fn send_response(&self, server: &mut ServerConnection, response: WorkResult) -> io::Result<()> {
+    fn send_response(&self, server: &mut ServerConnection, response: &WorkResult) -> io::Result<()> {
         let mut payload = Vec::new();
         payload.extend_from_slice(self.handle.as_bytes());
         match response {
@@ -159,7 +159,7 @@ pub struct ServerConnection {
 impl ServerConnection {
     fn new(addr: SocketAddr) -> Self {
         Self {
-            addr: addr,
+            addr,
             stream: None,
         }
     }
@@ -185,7 +185,7 @@ impl ServerConnection {
             None => return Err(io::Error::new(io::ErrorKind::NotConnected, "Stream is not open...")),
         };
 
-        stream.write(b"\0REQ")?;
+        stream.write_all(b"\0REQ")?;
         stream.write_u32::<BigEndian>(command)?;
         stream.write_u32::<BigEndian>(param.len() as u32)?;
         stream.write_all(param)?;
@@ -260,7 +260,7 @@ impl Worker {
         self.server.send(GRAB_JOB, b"")?;
         let resp = self.server.read_header()?;
         match resp.cmd {
-            n if n == JOB_ASSIGN => Ok(Some(Job::from_data(resp.data)?)),
+            n if n == JOB_ASSIGN => Ok(Some(Job::from_data(&resp.data[..])?)),
             n if n == NO_JOB => Ok(None),
             n => Err(io::Error::new(io::ErrorKind::InvalidData, format!("Either JOB_ASSIGN or NO_JOB was expected but packet {} was received instead.", n))),
         }
@@ -272,7 +272,7 @@ impl Worker {
         if let Some(job) = self.grab_job()? {
             jobs += 1;
             match self.functions.get(&job.function) {
-                Some(func) if func.enabled => job.send_response(&mut self.server, (func.callback)(&job.workload))?,
+                Some(func) if func.enabled => job.send_response(&mut self.server, &(func.callback)(&job.workload))?,
                 Some(_) => eprintln!("Disabled job {:?}", job.function),
                 None => eprintln!("Unknown job {:?}", job.function),
             }
@@ -297,16 +297,16 @@ impl WorkerBuilder {
         self
     }
 
-    pub fn connect<'a>(self) -> io::Result<Worker> {
+    pub fn connect(self) -> io::Result<Worker> {
         let id = match self.id {
             Some(id) => id.clone(),
             None => {
-                let uniqid = Uuid::new(UuidVersion::Mac).unwrap_or_else(|| Uuid::new_v4());
+                let uniqid = Uuid::new(UuidVersion::Mac).unwrap_or_else(Uuid::new_v4);
                 format!("{}-{}", process::id(), uniqid.hyphenated())
             },
         };
         let mut worker = Worker {
-            id: id,
+            id,
             server: self.server,
             functions: HashMap::new(),
         };
