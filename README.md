@@ -1,4 +1,7 @@
-# Gearman Worker Library for Rust ![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg?longCache=true&style=flat-square "Status: Alpha")
+# Gearman Worker Library for Rust
+
+![Status: Alpha](https://img.shields.io/badge/status-alpha-red.svg?longCache=true "Status: Alpha")
+[![Build Status](https://travis-ci.com/mtorromeo/gearman-worker-rs.svg?branch=master)](https://travis-ci.com/mtorromeo/gearman-worker-rs)
 
 High level library to implement [Gearman] workers.
 
