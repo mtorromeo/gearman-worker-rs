@@ -44,7 +44,7 @@ Fn(&[u8]) -> Result<Vec<u8>, Option<Vec<u8>>>;
 
 ## Known issues
 
-This as not been tested yet with a real workload and the public interface will probably change in the future.
+This has not been tested yet with a real workload and the public interface will probably change in the future.
 
 The worker runs in a single thread using blocking tcp connections. This is fine if you don't expect high concurrency and you can always spawn multiple separate processes to handle the workload but I plan on implementing multi-threading and non-blocking io (probably with tokio).
 
