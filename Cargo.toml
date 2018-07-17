@@ -11,6 +11,7 @@ license-file = "LICENSE"
 keywords = ["gearman", "queue-workers"]
 
 [badges]
+travis-ci = { repository = "mtorromeo/gearman-worker-rs", branch = "master" }
 maintenance = { status = "experimental" }
 
 [dependencies]
