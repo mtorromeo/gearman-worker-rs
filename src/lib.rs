@@ -1,16 +1,14 @@
-extern crate uuid;
 extern crate byteorder;
+extern crate uuid;
 
-use std::error::Error;
-use std::fmt;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
-use std::process;
 use std::io;
 use std::io::prelude::*;
 use std::net::SocketAddr;
 use std::net::TcpStream;
+use std::process;
 use uuid::{Uuid, UuidVersion};
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 const CAN_DO: u32 = 1;
 const CANT_DO: u32 = 2;
@@ -79,7 +77,10 @@ impl Packet {
         stream.read_exact(&mut magic)?;
 
         if magic != b"\0RES" {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Unexpected magic packet received from server"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Unexpected magic packet received from server",
+            ));
         }
 
         let cmd = stream.read_u32::<BigEndian>()?;
@@ -90,10 +91,7 @@ impl Packet {
             stream.read_exact(&mut data)?;
         }
 
-        Ok(Packet {
-            cmd,
-            data,
-        })
+        Ok(Packet { cmd, data })
     }
 }
 
@@ -109,15 +107,25 @@ impl Job {
 
         let handle = match iter.next() {
             Some(handle) => String::from_utf8_lossy(handle),
-            None => return Err(io::Error::new(io::ErrorKind::InvalidData, "Could not decode handle id")),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Could not decode handle id",
+                ))
+            }
         };
 
         let fun = match iter.next() {
             Some(fun) => String::from_utf8_lossy(fun),
-            None => return Err(io::Error::new(io::ErrorKind::InvalidData, "Could not decode function name")),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Could not decode function name",
+                ))
+            }
         };
 
-        let payload = &data[handle.len() + fun.len() + 2 .. ];
+        let payload = &data[handle.len() + fun.len() + 2..];
 
         Ok(Self {
             handle: handle.to_string(),
@@ -158,10 +166,7 @@ pub struct ServerConnection {
 
 impl ServerConnection {
     fn new(addr: SocketAddr) -> Self {
-        Self {
-            addr,
-            stream: None,
-        }
+        Self { addr, stream: None }
     }
 
     fn connect(&mut self) -> io::Result<()> {
@@ -173,7 +178,12 @@ impl ServerConnection {
     fn read_header(&mut self) -> io::Result<Packet> {
         let mut stream = match &mut self.stream {
             Some(ref mut stream) => stream,
-            None => return Err(io::Error::new(io::ErrorKind::NotConnected, "Stream is not open...")),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Stream is not open...",
+                ))
+            }
         };
 
         Ok(Packet::from_stream(&mut stream)?)
@@ -182,7 +192,12 @@ impl ServerConnection {
     fn send(&mut self, command: u32, param: &[u8]) -> io::Result<()> {
         let mut stream = match &self.stream {
             Some(ref stream) => stream,
-            None => return Err(io::Error::new(io::ErrorKind::NotConnected, "Stream is not open...")),
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Stream is not open...",
+                ))
+            }
         };
 
         stream.write_all(b"\0REQ")?;
@@ -209,7 +224,8 @@ impl Worker {
     {
         let name = name.as_ref();
         self.server.send(CAN_DO, &name.as_bytes())?;
-        self.functions.insert(name.to_string(), CallbackInfo::new(callback));
+        self.functions
+            .insert(name.to_string(), CallbackInfo::new(callback));
         Ok(())
     }
 
@@ -234,10 +250,14 @@ impl Worker {
         match self.functions.get_mut(name) {
             Some(ref mut func) if func.enabled != enabled => {
                 func.enabled = enabled;
-                let op = if enabled {CAN_DO} else {CANT_DO};
+                let op = if enabled { CAN_DO } else { CANT_DO };
                 self.server.send(op, name.as_bytes())?;
-            },
-            Some(_) => eprintln!("Function {} is already {}", name, if enabled {"enabled"} else {"disabled"}),
+            }
+            Some(_) => eprintln!(
+                "Function {} is already {}",
+                name,
+                if enabled { "enabled" } else { "disabled" }
+            ),
             None => eprintln!("Unknown function {}", name),
         }
         Ok(())
@@ -252,7 +272,13 @@ impl Worker {
         let resp = self.server.read_header()?;
         match resp.cmd {
             n if n == NOOP => Ok(()),
-            n => Err(io::Error::new(io::ErrorKind::InvalidData, format!("Worker was sleeping. NOOP was expected but packet {} was received instead.", n))),
+            n => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Worker was sleeping. NOOP was expected but packet {} was received instead.",
+                    n
+                ),
+            )),
         }
     }
 
@@ -262,7 +288,13 @@ impl Worker {
         match resp.cmd {
             n if n == JOB_ASSIGN => Ok(Some(Job::from_data(&resp.data[..])?)),
             n if n == NO_JOB => Ok(None),
-            n => Err(io::Error::new(io::ErrorKind::InvalidData, format!("Either JOB_ASSIGN or NO_JOB was expected but packet {} was received instead.", n))),
+            n => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Either JOB_ASSIGN or NO_JOB was expected but packet {} was received instead.",
+                    n
+                ),
+            )),
         }
     }
 
@@ -272,7 +304,9 @@ impl Worker {
         if let Some(job) = self.grab_job()? {
             jobs += 1;
             match self.functions.get(&job.function) {
-                Some(func) if func.enabled => job.send_response(&mut self.server, &(func.callback)(&job.workload))?,
+                Some(func) if func.enabled => {
+                    job.send_response(&mut self.server, &(func.callback)(&job.workload))?
+                }
                 Some(_) => eprintln!("Disabled job {:?}", job.function),
                 None => eprintln!("Unknown job {:?}", job.function),
             }
@@ -303,7 +337,7 @@ impl WorkerBuilder {
             None => {
                 let uniqid = Uuid::new(UuidVersion::Mac).unwrap_or_else(Uuid::new_v4);
                 format!("{}-{}", process::id(), uniqid.hyphenated())
-            },
+            }
         };
         let mut worker = Worker {
             id,
@@ -319,22 +353,29 @@ impl WorkerBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time;
-    use std::thread;
-    use std::process::{Command, Stdio, Child};
     use std::io::BufReader;
+    use std::process::{Child, Command, Stdio};
+    use std::thread;
+    use std::time;
 
     fn run_gearmand() -> Child {
         let mut gearmand = Command::new("gearmand")
-            .arg("-L").arg("127.0.0.1")
-            .arg("-p").arg("14730")
-            .arg("-l").arg("stderr")
-            .arg("--verbose").arg("INFO")
+            .arg("-L")
+            .arg("127.0.0.1")
+            .arg("-p")
+            .arg("14730")
+            .arg("-l")
+            .arg("stderr")
+            .arg("--verbose")
+            .arg("INFO")
             .stderr(Stdio::piped())
             .spawn()
             .expect("Failed to stard gearmand");
 
-        let gearmand_err = gearmand.stderr.take().expect("Failed to capture gearmand's stderr");
+        let gearmand_err = gearmand
+            .stderr
+            .take()
+            .expect("Failed to capture gearmand's stderr");
         let mut reader = BufReader::new(gearmand_err);
         loop {
             let mut line = String::new();
@@ -350,8 +391,10 @@ mod tests {
     fn submit_job(func: &str) -> Child {
         let gearman_cli = Command::new("gearman")
             .arg("-Is")
-            .arg("-p").arg("14730")
-            .arg("-f").arg(func)
+            .arg("-p")
+            .arg("14730")
+            .arg("-f")
+            .arg(func)
             .stdout(Stdio::piped())
             .spawn()
             .expect("Failed to submit gearman job");
@@ -373,10 +416,12 @@ mod tests {
             .connect()
             .expect("Failed to connect to gearmand server");
 
-        worker.register_function("testfun", |_| {
-            println!("testfun called");
-            Ok(b"foobar")
-        }).expect("Failed to register test function");
+        worker
+            .register_function("testfun", |_| {
+                println!("testfun called");
+                Ok(b"foobar")
+            })
+            .expect("Failed to register test function");
 
         // worker.set_function_enabled("testfun", false).unwrap();
 
