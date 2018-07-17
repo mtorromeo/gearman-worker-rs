@@ -1,6 +1,6 @@
 [package]
 name = "gearman-worker"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Massimiliano Torromeo <massimiliano.torromeo@gmail.com>"]
 description = "High level library to implement Gearman workers"
 homepage = "https://github.com/mtorromeo/gearman-worker-rs"
