@@ -24,7 +24,7 @@ const WORK_FAIL: u32 = 14;
 const SET_CLIENT_ID: u32 = 22;
 // const CAN_DO_TIMEOUT: u32 = 23;
 // const ALL_YOURS: u32 = 24;
-// const WORK_EXCEPTION: u32 = 25;
+const WORK_EXCEPTION: u32 = 25;
 // const WORK_DATA: u32 = 28;
 // const WORK_WARNING: u32 = 29;
 // const GRAB_JOB_UNIQ: u32 = 30;
@@ -37,24 +37,7 @@ pub struct Packet {
     data: Vec<u8>,
 }
 
-#[derive(Debug)]
-pub struct WorkError {
-    function: String,
-}
-
-impl Error for WorkError {
-    fn description(&self) -> &str {
-        "Work on function failed"
-    }
-}
-
-impl fmt::Display for WorkError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Work on function {} failed", self.function)
-    }
-}
-
-type WorkResult<'a> = Result<&'a[u8], WorkError>;
+type WorkResult = Result<Vec<u8>, Option<Vec<u8>>>;
 type Callback = Box<Fn(&[u8]) -> WorkResult + 'static>;
 
 struct CallbackInfo {
@@ -134,17 +117,29 @@ impl Job {
         })
     }
 
-    fn send_response(&self, server: &mut ServerConnection, response: &WorkResult) -> io::Result<()> {
-        let mut payload = Vec::new();
-        payload.extend_from_slice(self.handle.as_bytes());
-        match response {
-            Ok(data) => {
-                payload.extend_from_slice(b"\0");
-                payload.extend_from_slice(data);
-                server.send(WORK_COMPLETE, &payload[..])
-            },
-            Err(_) => server.send(WORK_FAIL, &payload[..])
+    fn send_response(
+        &self,
+        server: &mut ServerConnection,
+        response: &WorkResult,
+    ) -> io::Result<()> {
+        let (op, data) = match response {
+            Ok(data) => (WORK_COMPLETE, Some(data)),
+            Err(Some(data)) => (WORK_FAIL, Some(data)),
+            Err(None) => (WORK_EXCEPTION, None),
+        };
+
+        let mut size = self.handle.len() + 1;
+        if let Some(data) = data {
+            size += data.len();
         }
+
+        let mut payload = Vec::with_capacity(size);
+        payload.extend_from_slice(self.handle.as_bytes());
+        if let Some(data) = data {
+            payload.extend_from_slice(b"\0");
+            payload.extend_from_slice(data);
+        }
+        server.send(op, &payload[..])
     }
 }
 
@@ -419,7 +414,7 @@ mod tests {
         worker
             .register_function("testfun", |_| {
                 println!("testfun called");
-                Ok(b"foobar")
+                Ok(b"foobar".to_vec())
             })
             .expect("Failed to register test function");
 

@@ -27,8 +27,10 @@ fn main() {
         .with_id("my-worker-rs-1")
         .connect().unwrap();
 
-    worker.register_function("hello", |_| {
-        Ok(b"world!")
+    worker.register_function("greet", |input| {
+        let hello = String::from_utf8_lossy(input);
+        let response = format!("{} world!", hello);
+        Ok(response.into_bytes())
     }).unwrap();
 
     worker.run().unwrap();
@@ -37,7 +39,7 @@ fn main() {
 
 where the worker functions have the following signature:
 ```rust
-Fn(&[u8]) -> Result<&[u8], gearman_worker::WorkError>;
+Fn(&[u8]) -> Result<Vec<u8>, Option<Vec<u8>>>;
 ```
 
 ## Known issues
@@ -50,7 +52,6 @@ The following gearman operations are not currently supported but the typical use
 
 - WORK_STATUS
 - CAN_DO_TIMEOUT
-- WORK_EXCEPTION
 - WORK_DATA
 - WORK_WARNING
 - GRAB_JOB_UNIQ
