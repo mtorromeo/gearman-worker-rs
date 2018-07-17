@@ -15,7 +15,7 @@ gearman-worker = "*"
 
 ## Usage
 
-```rs
+```rust
 extern crate gearman_worker;
 
 use gearman_worker::Worker;
@@ -36,7 +36,7 @@ fn main() {
 ```
 
 where the worker functions have the following signature:
-```rs
+```rust
 Fn(&[u8]) -> Result<&[u8], gearman_worker::WorkError>;
 ```
 
