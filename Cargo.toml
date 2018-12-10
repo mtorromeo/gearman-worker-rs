@@ -9,6 +9,7 @@ readme = "README.md"
 license = "MIT"
 license-file = "LICENSE"
 keywords = ["gearman", "queue-workers"]
+edition = "2018"
 
 [badges]
 travis-ci = { repository = "mtorromeo/gearman-worker-rs", branch = "master" }

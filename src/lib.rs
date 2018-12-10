@@ -1,6 +1,3 @@
-extern crate byteorder;
-extern crate uuid;
-
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
 use std::io;
@@ -205,6 +202,7 @@ impl ServerConnection {
 }
 
 impl Worker {
+    #![allow(clippy::new_ret_no_self)]
     pub fn new(addr: SocketAddr) -> WorkerBuilder {
         WorkerBuilder {
             id: None,
