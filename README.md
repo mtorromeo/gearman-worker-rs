@@ -23,9 +23,8 @@ use gearman_worker::Worker;
 fn main() {
     let server_addr = "127.0.0.1:4730".parse().unwrap();
 
-    let mut worker = Worker::new(server_addr)
-        .with_id("my-worker-rs-1")
-        .connect().unwrap();
+    let mut worker = WorkerBuilder::new("my-worker-rs-1", server_addr).build();
+    worker.connect().unwrap();
 
     worker.register_function("greet", |input| {
         let hello = String::from_utf8_lossy(input);
@@ -73,7 +72,18 @@ If you discover any security related issues, please email massimiliano.torromeo@
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE) for more information.
+This software is licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+   http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+   http://opensource.org/licenses/MIT)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
 
 [Gearman]: http://gearman.org/
 [link-author]: https://github.com/mtorromeo
