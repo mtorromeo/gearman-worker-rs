@@ -5,7 +5,7 @@ use std::io::prelude::*;
 use std::net::SocketAddr;
 use std::net::TcpStream;
 use std::process;
-use uuid::{Uuid, UuidVersion};
+use uuid::Uuid;
 
 const CAN_DO: u32 = 1;
 const CANT_DO: u32 = 2;
@@ -91,7 +91,7 @@ impl Job {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Could not decode handle id",
-                ))
+                ));
             }
         };
 
@@ -101,7 +101,7 @@ impl Job {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Could not decode function name",
-                ))
+                ));
             }
         };
 
@@ -174,7 +174,7 @@ impl ServerConnection {
                 return Err(io::Error::new(
                     io::ErrorKind::NotConnected,
                     "Stream is not open...",
-                ))
+                ));
             }
         };
 
@@ -188,7 +188,7 @@ impl ServerConnection {
                 return Err(io::Error::new(
                     io::ErrorKind::NotConnected,
                     "Stream is not open...",
-                ))
+                ));
             }
         };
 
@@ -328,8 +328,8 @@ impl WorkerBuilder {
         let id = match self.id {
             Some(id) => id.clone(),
             None => {
-                let uniqid = Uuid::new(UuidVersion::Mac).unwrap_or_else(Uuid::new_v4);
-                format!("{}-{}", process::id(), uniqid.hyphenated())
+                let uniqid = Uuid::new_v4();
+                format!("{}-{}", process::id(), uniqid.to_hyphenated())
             }
         };
         let mut worker = Worker {
