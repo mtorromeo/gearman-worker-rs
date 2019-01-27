@@ -1,9 +1,36 @@
+#![deny(missing_docs)]
+//! # gearman-worker
+//!
+//! The `gearman-worker` crate provides a high level library to easily
+//! implement gearman [`Worker`](struct.Worker.html)s.
+//!
+//! It handles registration of functions as jobs in the gearman queue
+//! server, fetching of jobs and their workload.
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! use gearman_worker::WorkerBuilder;
+//!
+//! fn main() {
+//!     let mut worker = WorkerBuilder::default().build();
+//!     worker.connect().unwrap();
+//!
+//!     worker.register_function("greet", |input| {
+//!         let hello = String::from_utf8_lossy(input);
+//!         let response = format!("{} world!", hello);
+//!         Ok(response.into_bytes())
+//!     }).unwrap();
+//!
+//!     worker.run().unwrap();
+//! }
+//! ```
+
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
-use std::net::SocketAddr;
-use std::net::TcpStream;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::process;
 use uuid::Uuid;
 
@@ -29,8 +56,11 @@ const WORK_EXCEPTION: u32 = 25;
 // const GRAB_JOB_ALL: u32 = 39;
 // const JOB_ASSIGN_ALL: u32 = 40;
 
-pub struct Packet {
+/// A packet received from the gearman queue server.
+struct Packet {
+    /// The packet type representing the request intent
     cmd: u32,
+    /// The data associated with the request
     data: Vec<u8>,
 }
 
@@ -52,6 +82,7 @@ impl CallbackInfo {
 }
 
 impl Packet {
+    /// Decodes a packet from a stream received from the gearman server
     fn from_stream(stream: &mut TcpStream) -> io::Result<Self> {
         let mut magic = vec![0u8; 4];
         stream.read_exact(&mut magic)?;
@@ -75,7 +106,7 @@ impl Packet {
     }
 }
 
-pub struct Job {
+struct Job {
     handle: String,
     function: String,
     workload: Vec<u8>,
@@ -125,10 +156,7 @@ impl Job {
             Err(None) => (WORK_EXCEPTION, None),
         };
 
-        let mut size = self.handle.len() + 1;
-        if let Some(data) = data {
-            size += data.len();
-        }
+        let size = self.handle.len() + 1 + data.map_or(0, |b| b.len());
 
         let mut payload = Vec::with_capacity(size);
         payload.extend_from_slice(self.handle.as_bytes());
@@ -140,18 +168,44 @@ impl Job {
     }
 }
 
+/// The `Worker` processes jobs provided by the gearman queue server.
+///
+/// Building a worker requires a [`SocketAddr`](https://doc.rust-lang.org/std/net/enum.SocketAddr.html) to
+/// connect to the gearman server (typically some ip address on port 4730).
+///
+/// The worker also needs a unique id to identify itself to the server.
+/// This can be omitted letting the [`WorkerBuilder`](struct.WorkerBuilder.html) generate one composed
+/// by the process id and a random uuid v4.
+///
+/// # Examples
+///
+/// Create a worker with all default options.
+///
+/// ```
+/// use gearman_worker::WorkerBuilder;
+/// let mut worker = WorkerBuilder::default().build();
+/// ```
+///
+/// Create a worker with all explicit options.
+///
+/// ```
+/// use gearman_worker::WorkerBuilder;
+/// let mut worker = WorkerBuilder::new("my-worker-1", "127.0.0.1:4730".parse().unwrap()).build();
+/// ```
 pub struct Worker {
+    /// the unique id of the worker
     id: String,
     server: ServerConnection,
     functions: HashMap<String, CallbackInfo>,
 }
 
+/// Helps building a new [`Worker`](struct.Worker.html)
 pub struct WorkerBuilder {
-    id: Option<String>,
-    server: ServerConnection,
+    id: String,
+    addr: SocketAddr,
 }
 
-pub struct ServerConnection {
+struct ServerConnection {
     addr: SocketAddr,
     stream: Option<TcpStream>,
 }
@@ -202,14 +256,20 @@ impl ServerConnection {
 }
 
 impl Worker {
-    #![allow(clippy::new_ret_no_self)]
-    pub fn new(addr: SocketAddr) -> WorkerBuilder {
-        WorkerBuilder {
-            id: None,
-            server: ServerConnection::new(addr),
-        }
-    }
-
+    /// Registers a `callback` function that can handle jobs with the specified `name`
+    /// provided by the gearman queue server.
+    ///
+    /// The callback has the signature `Fn(&[u8]) -> WorkResult + 'static` receiving a
+    /// slice of bytes in input, which is the workload received from the gearmand server.
+    ///
+    /// It can return `Ok(Vec<u8>)` ([`WORK_COMPLETE`][protocol]) where the vector of
+    /// bytes is the result of the job that will be transmitted back to the server,
+    /// `Err(None)` ([`WORK_EXCEPTION`][protocol]) which will tell the server that the
+    /// job failed with an unspecified error or `Err(Some(Vec<u8>))` ([`WORK_FAIL`][protocol])
+    /// which will also represent a job failure but will include a payload of the error
+    /// to the gearmand server.
+    ///
+    /// [protocol]: http://gearman.org/protocol
     pub fn register_function<S, F>(&mut self, name: S, callback: F) -> io::Result<()>
     where
         S: AsRef<str>,
@@ -222,6 +282,8 @@ impl Worker {
         Ok(())
     }
 
+    /// Unregisters a previously registered function, notifying the server that
+    /// this worker is not available anymore to process jobs with the specified `name`.
     pub fn unregister_function<S>(&mut self, name: S) -> io::Result<()>
     where
         S: AsRef<str>,
@@ -235,6 +297,8 @@ impl Worker {
         Ok(())
     }
 
+    /// Notify the gearman queue server that we are available/unavailable to process
+    /// jobs with the specified `name`.
     pub fn set_function_enabled<S>(&mut self, name: S, enabled: bool) -> io::Result<()>
     where
         S: AsRef<str>,
@@ -256,6 +320,7 @@ impl Worker {
         Ok(())
     }
 
+    /// Let the server know that the worker identifies itself with the associated `id`.
     pub fn set_client_id(&mut self) -> io::Result<()> {
         self.server.send(SET_CLIENT_ID, self.id.as_bytes())
     }
@@ -291,6 +356,8 @@ impl Worker {
         }
     }
 
+    /// Ask the server to do some work. This will process one job that will be provided by
+    /// the gearman queue server when available.
     pub fn do_work(&mut self) -> io::Result<u32> {
         let mut jobs = 0;
 
@@ -300,6 +367,7 @@ impl Worker {
                 Some(func) if func.enabled => {
                     job.send_response(&mut self.server, &(func.callback)(&job.workload))?
                 }
+                // gearmand should never pass us a job which was never advertised or unregistered
                 Some(_) => eprintln!("Disabled job {:?}", job.function),
                 None => eprintln!("Unknown job {:?}", job.function),
             }
@@ -308,6 +376,8 @@ impl Worker {
         Ok(jobs)
     }
 
+    /// Process any available job as soon as the gearman queue server provides us with one
+    /// in a loop.
     pub fn run(&mut self) -> io::Result<()> {
         loop {
             let done = self.do_work()?;
@@ -316,30 +386,53 @@ impl Worker {
             }
         }
     }
+
+    /// Estabilish a connection with the queue server and send it the ID of this worker.
+    pub fn connect(&mut self) -> io::Result<&mut Self> {
+        self.server.connect()?;
+        self.set_client_id()?;
+        Ok(self)
+    }
 }
 
 impl WorkerBuilder {
-    pub fn with_id<S: Into<String>>(mut self, id: S) -> Self {
-        self.id = Some(id.into());
+    /// Create a new WorkerBuilder passing all options explicitly.
+    pub fn new<S: Into<String>>(id: S, addr: SocketAddr) -> Self {
+        Self {
+            id: id.into(),
+            addr,
+        }
+    }
+
+    /// Set a specific ID for this worker. This should be unique to all workers!
+    pub fn id<S: Into<String>>(&mut self, id: S) -> &mut Self {
+        self.id = id.into();
         self
     }
 
-    pub fn connect(self) -> io::Result<Worker> {
-        let id = match self.id {
-            Some(id) => id.clone(),
-            None => {
-                let uniqid = Uuid::new_v4();
-                format!("{}-{}", process::id(), uniqid.to_hyphenated())
-            }
-        };
-        let mut worker = Worker {
-            id,
-            server: self.server,
+    /// Define the socket address to connect to.
+    pub fn addr(&mut self, addr: SocketAddr) -> &mut Self {
+        self.addr = addr;
+        self
+    }
+
+    /// Build the [`Worker`](struct.Worker.html).
+    pub fn build(&self) -> Worker {
+        Worker {
+            id: self.id.clone(),
+            server: ServerConnection::new(self.addr),
             functions: HashMap::new(),
-        };
-        worker.server.connect()?;
-        worker.set_client_id()?;
-        Ok(worker)
+        }
+    }
+}
+
+impl Default for WorkerBuilder {
+    fn default() -> Self {
+        let uniqid = Uuid::new_v4();
+        Self::new(
+            format!("{}-{}", process::id(), uniqid.to_hyphenated()),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 4730),
+        )
     }
 }
 
@@ -404,8 +497,12 @@ mod tests {
 
         let addr = "127.0.0.1:14730".parse().unwrap();
 
-        let mut worker = Worker::new(addr)
-            .with_id("gearman-worker-rs-1")
+        let mut worker = WorkerBuilder::default()
+            .addr(addr)
+            .id("gearman-worker-rs-1")
+            .build();
+
+        worker
             .connect()
             .expect("Failed to connect to gearmand server");
 
