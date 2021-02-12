@@ -65,7 +65,7 @@ struct Packet {
 }
 
 type WorkResult = Result<Vec<u8>, Option<Vec<u8>>>;
-type Callback = Box<Fn(&[u8]) -> WorkResult + 'static>;
+type Callback = Box<dyn Fn(&[u8]) -> WorkResult + 'static>;
 
 struct CallbackInfo {
     callback: Callback,

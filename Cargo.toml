@@ -16,5 +16,5 @@ travis-ci = { repository = "mtorromeo/gearman-worker-rs", branch = "master" }
 maintenance = { status = "experimental" }
 
 [dependencies]
-uuid = { version = "0.7", features = ["v4"] }
+uuid = { version = ">=0.7.0, <0.9.0", features = ["v4"] }
 byteorder = "1.3"
